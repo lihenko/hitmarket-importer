@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.10.1",
     "mysql2": "^3.23.2"
   }
 }

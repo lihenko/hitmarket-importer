@@ -30,7 +30,6 @@ export async function importProduct(
   supplierProduct: SupplierProduct
 ) {
 
-
   /**
    * 1. Нормалізація даних
    */
@@ -40,9 +39,42 @@ export async function importProduct(
     );
 
 
+  /**
+   * 2. Шукаємо товар
+   *
+   * Робимо це ДО генерації config,
+   * категорій та інших операцій.
+   */
+  const existing =
+    await getProductBySourceOffer(
+      product.source,
+      product.sourceOfferId
+    );
+
 
   /**
-   * 2. Генерація структури лендинга
+   * 3. Якщо товар НОВИЙ і спочатку
+   *    unavailable — повністю пропускаємо.
+   *
+   * В БД він взагалі не потрапить.
+   */
+  if (!existing && product.available === false) {
+
+    return {
+      productId: null,
+      categoryId: null,
+      price: product.price,
+      status: "skipped",
+    };
+
+  }
+
+
+  /**
+   * 4. Генерація структури лендинга
+   *
+   * Робимо тільки для товарів,
+   * які реально будемо створювати/оновлювати.
    */
   const config =
     generateProductConfig(
@@ -50,12 +82,10 @@ export async function importProduct(
     );
 
 
-
   /**
-   * 3. Категорія
+   * 5. Категорія
    */
   let categoryId: number | null = null;
-
 
   if (product.category) {
 
@@ -76,78 +106,55 @@ export async function importProduct(
   }
 
 
-
   /**
-   * 4. Шукаємо товар
+   * 6. Новий товар
    */
-  const existing =
-    await getProductBySourceOffer(
-      product.source,
-      product.sourceOfferId
-    );
-
-
   let productId: number;
 
-
-
-  /**
-   * НОВИЙ ТОВАР
-   */
   if (!existing) {
 
-
+    /**
+     * НОВИЙ ТОВАР
+     */
     const result =
       await createProduct({
 
         source:
           product.source,
 
-
         sourceOfferId:
           product.sourceOfferId,
-
 
         name:
           product.name,
 
-
         slug:
           product.slug,
-
 
         price:
           product.price,
 
-
         oldPrice:
           product.oldPrice,
-
 
         available:
           product.available,
 
-
         vendor:
           product.vendor,
-
 
         description:
           product.description,
 
-
         seoTitle:
           config.seo.title,
-
 
         seoDescription:
           config.seo.description,
 
-
         config,
 
       });
-
 
 
     const insert =
@@ -160,9 +167,7 @@ export async function importProduct(
       insert.insertId;
 
 
-
   } else {
-
 
     /**
      * ІСНУЮЧИЙ ТОВАР
@@ -173,10 +178,8 @@ export async function importProduct(
      * - наявність
      */
 
-
     productId =
       existing.id;
-
 
 
     await updateProduct(
@@ -188,10 +191,8 @@ export async function importProduct(
         price:
           product.price,
 
-
         oldPrice:
           product.oldPrice,
-
 
         available:
           product.available,
@@ -203,33 +204,27 @@ export async function importProduct(
   }
 
 
-
   /**
-   * 5. Картинки
+   * 7. Картинки
    *
-   * Додаємо тільки для нового товару
+   * Додаємо тільки для нового товару.
    */
   if (!existing) {
-
 
     for (
       const [index, imageUrl]
       of product.images.entries()
     ) {
 
-
       await getOrCreateProductImage({
 
         productId,
 
-
         sourceUrl:
           imageUrl,
 
-
         localPath:
           `/products/${product.slug}-${index}.webp`,
-
 
         sortOrder:
           index + 1,
@@ -241,14 +236,12 @@ export async function importProduct(
   }
 
 
-
   /**
-   * 6. Характеристики
+   * 8. Характеристики
    *
-   * Додаємо тільки для нового товару
+   * Додаємо тільки для нового товару.
    */
   if (!existing) {
-
 
     await syncProductParams(
 
@@ -261,18 +254,17 @@ export async function importProduct(
   }
 
 
-
+  /**
+   * 9. Результат
+   */
   return {
 
     productId,
 
-
     categoryId,
-
 
     price:
       product.price,
-
 
     status:
       existing
