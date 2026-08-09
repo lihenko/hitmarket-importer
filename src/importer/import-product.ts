@@ -25,14 +25,25 @@ import {
   generateProductConfig,
 } from "./generate-config";
 
+import {
+  saveProductImage,
+} from "./save-product-image";
+
+import {
+  rewriteProduct,
+} from "../ai/rewrite-product";
+
 
 export async function importProduct(
   supplierProduct: SupplierProduct
 ) {
 
   /**
-   * 1. Нормалізація даних
+   * ============================================================
+   * 1. НОРМАЛІЗАЦІЯ
+   * ============================================================
    */
+
   const product =
     normalizeProduct(
       supplierProduct
@@ -40,11 +51,11 @@ export async function importProduct(
 
 
   /**
-   * 2. Шукаємо товар
-   *
-   * Робимо це ДО генерації config,
-   * категорій та інших операцій.
+   * ============================================================
+   * 2. ШУКАЄМО ТОВАР У БАЗІ
+   * ============================================================
    */
+
   const existing =
     await getProductBySourceOffer(
       product.source,
@@ -53,39 +64,256 @@ export async function importProduct(
 
 
   /**
-   * 3. Якщо товар НОВИЙ і спочатку
-   *    unavailable — повністю пропускаємо.
+   * ============================================================
+   * 3. ІСНУЮЧИЙ ТОВАР
+   * ============================================================
    *
-   * В БД він взагалі не потрапить.
+   * Для існуючого товару НЕ робимо:
+   *
+   * - OpenAI
+   * - рерайт
+   * - зміну назви
+   * - зміну опису
+   * - зміну SEO
+   * - зміну config
+   * - завантаження картинок
+   * - синхронізацію характеристик
+   * - зміну категорії
+   *
+   * Перевіряємо тільки:
+   *
+   * - price
+   * - oldPrice
+   * - available
    */
-  if (!existing && product.available === false) {
+
+  if (existing) {
+
+    const changes: {
+      price?: number;
+      oldPrice?: number | null;
+      available?: boolean;
+    } = {};
+
+
+    /**
+     * ----------------------------------------------------------
+     * ЦІНА
+     * ----------------------------------------------------------
+     */
+
+    if (
+      existing.price !==
+      product.price
+    ) {
+
+      changes.price =
+        product.price;
+
+    }
+
+
+    /**
+     * ----------------------------------------------------------
+     * СТАРА ЦІНА
+     * ----------------------------------------------------------
+     */
+
+    if (
+      existing.old_price !==
+      product.oldPrice
+    ) {
+
+      changes.oldPrice =
+        product.oldPrice;
+
+    }
+
+
+    /**
+     * ----------------------------------------------------------
+     * НАЯВНІСТЬ
+     * ----------------------------------------------------------
+     */
+
+    if (
+      existing.available !==
+      product.available
+    ) {
+
+      changes.available =
+        product.available;
+
+    }
+
+
+    /**
+     * ----------------------------------------------------------
+     * ОНОВЛЮЄМО ТІЛЬКИ ЯКЩО Є ЗМІНИ
+     * ----------------------------------------------------------
+     */
+
+    if (
+      Object.keys(changes).length > 0
+    ) {
+
+      await updateProduct(
+        existing.id,
+        changes
+      );
+
+    }
+
+
+    /**
+     * Нічого більше з товаром
+     * не робимо.
+     */
 
     return {
-      productId: null,
-      categoryId: null,
-      price: product.price,
-      status: "skipped",
+
+      productId:
+        existing.id,
+
+      categoryId:
+        existing.category_id,
+
+      price:
+        product.price,
+
+      status:
+        Object.keys(changes).length > 0
+          ? "updated"
+          : "unchanged",
+
     };
 
   }
 
 
   /**
-   * 4. Генерація структури лендинга
+   * ============================================================
+   * 4. НОВИЙ ТОВАР, АЛЕ НЕДОСТУПНИЙ
+   * ============================================================
    *
-   * Робимо тільки для товарів,
-   * які реально будемо створювати/оновлювати.
+   * Якщо товар при першому імпорті
+   * має available=false —
+   *
+   * НЕ створюємо його в БД.
+   *
+   * НЕ запускаємо OpenAI.
+   *
+   * НЕ завантажуємо картинки.
+   *
+   * НЕ створюємо характеристики.
    */
-  const config =
-    generateProductConfig(
+
+  if (
+    product.available === false
+  ) {
+
+    return {
+
+      productId:
+        null,
+
+      categoryId:
+        null,
+
+      price:
+        product.price,
+
+      status:
+        "skipped",
+
+    };
+
+  }
+
+
+  /**
+   * ============================================================
+   * 5. OPENAI
+   * ============================================================
+   *
+   * На цьому етапі ми вже точно знаємо:
+   *
+   * - товар новий
+   * - товар доступний
+   *
+   * Тому запускаємо AI.
+   *
+   * rewriteProduct() використовує:
+   *
+   * nameUa
+   * descriptionUa
+   *
+   * як основне джерело.
+   *
+   * Якщо українських даних немає —
+   * використовуються name / description.
+   */
+
+  console.log(
+    `🤖 Generating content: ${product.sourceOfferId}`
+  );
+
+
+  const rewritten =
+    await rewriteProduct(
       product
     );
 
 
   /**
-   * 5. Категорія
+   * ============================================================
+   * 6. ГЕНЕРАЦІЯ CONFIG
+   * ============================================================
+   *
+   * generateProductConfig()
+   * поки що працює від NormalizedProduct.
+   *
+   * Тому створюємо копію product,
+   * де підставляємо AI-контент.
+   *
+   * Оригінальний product
+   * при цьому не змінюємо.
    */
-  let categoryId: number | null = null;
+
+  const productWithAiContent = {
+
+    ...product,
+
+    name:
+      rewritten.nameUa,
+
+    nameUa:
+      rewritten.nameUa,
+
+    description:
+      rewritten.descriptionUa,
+
+    descriptionUa:
+      rewritten.descriptionUa,
+
+  };
+
+
+  const config =
+    generateProductConfig(
+      productWithAiContent
+    );
+
+
+  /**
+   * ============================================================
+   * 7. КАТЕГОРІЯ
+   * ============================================================
+   */
+
+  let categoryId:
+    number | null = null;
+
 
   if (product.category) {
 
@@ -107,114 +335,118 @@ export async function importProduct(
 
 
   /**
-   * 6. Новий товар
+   * ============================================================
+   * 8. СТВОРЕННЯ ТОВАРУ
+   * ============================================================
+   *
+   * В БД записуємо:
+   *
+   * name
+   * name_ua
+   * description
+   * description_ua
+   * SEO
+   * config
+   *
+   * український контент — результат AI.
    */
-  let productId: number;
 
-  if (!existing) {
+  const result =
+    await createProduct({
 
-    /**
-     * НОВИЙ ТОВАР
-     */
-    const result =
-      await createProduct({
+      source:
+        product.source,
 
-        source:
-          product.source,
+      sourceOfferId:
+        product.sourceOfferId,
 
-        sourceOfferId:
-          product.sourceOfferId,
+      name:
+        product.name,
 
-        name:
-          product.name,
+      nameUa:
+        rewritten.nameUa,
 
-        slug:
-          product.slug,
+      slug:
+        product.slug,
 
-        price:
-          product.price,
+      price:
+        product.price,
 
-        oldPrice:
-          product.oldPrice,
+      oldPrice:
+        product.oldPrice,
 
-        available:
-          product.available,
+      available:
+        product.available,
 
-        vendor:
-          product.vendor,
+      vendor:
+        product.vendor,
 
-        description:
-          product.description,
+      description:
+        product.description,
 
-        seoTitle:
-          config.seo.title,
+      descriptionUa:
+        rewritten.descriptionUa,
 
-        seoDescription:
-          config.seo.description,
+      seoTitle:
+        rewritten.seoTitle,
 
-        config,
+      seoDescription:
+        rewritten.seoDescription,
 
-      });
+      config,
 
-
-    const insert =
-      result as {
-        insertId: number;
-      };
+    });
 
 
-    productId =
-      insert.insertId;
+  const insert =
+    result as {
+      insertId: number;
+    };
 
 
-  } else {
-
-    /**
-     * ІСНУЮЧИЙ ТОВАР
-     *
-     * Оновлюємо тільки:
-     * - ціну
-     * - стару ціну
-     * - наявність
-     */
-
-    productId =
-      existing.id;
-
-
-    await updateProduct(
-
-      productId,
-
-      {
-
-        price:
-          product.price,
-
-        oldPrice:
-          product.oldPrice,
-
-        available:
-          product.available,
-
-      }
-
-    );
-
-  }
+  const productId =
+    insert.insertId;
 
 
   /**
-   * 7. Картинки
+   * ============================================================
+   * 9. ЗОБРАЖЕННЯ
+   * ============================================================
    *
-   * Додаємо тільки для нового товару.
+   * Тільки для нового товару.
+   *
+   * saveProductImage():
+   *
+   * WebP → зберігаємо без перекодування
+   *
+   * JPG / PNG / інший формат
+   * → конвертуємо в WebP
+   *
+   * Результат:
+   *
+   * /powerbank-landing/public/products/
    */
-  if (!existing) {
 
-    for (
-      const [index, imageUrl]
-      of product.images.entries()
-    ) {
+  for (
+    const [
+      index,
+      imageUrl,
+    ]
+    of product.images.entries()
+  ) {
+
+    try {
+
+      const fileName =
+        `${product.slug}-${index}`;
+
+
+      const localPath =
+        await saveProductImage(
+          imageUrl,
+          fileName
+        );
+
 
       await getOrCreateProductImage({
 
@@ -223,13 +455,26 @@ export async function importProduct(
         sourceUrl:
           imageUrl,
 
-        localPath:
-          `/products/${product.slug}-${index}.webp`,
+        localPath,
 
         sortOrder:
           index + 1,
 
       });
+
+
+      console.log(
+        `🖼️ Image ${index + 1} saved: ${localPath}`
+      );
+
+
+    } catch (error) {
+
+      console.error(
+        `❌ Failed to process image ${index + 1} ` +
+        `for product ${product.sourceOfferId}:`,
+        error
+      );
 
     }
 
@@ -237,26 +482,30 @@ export async function importProduct(
 
 
   /**
-   * 8. Характеристики
+   * ============================================================
+   * 10. ХАРАКТЕРИСТИКИ
+   * ============================================================
    *
-   * Додаємо тільки для нового товару.
+   * Тільки для нового товару.
    */
-  if (!existing) {
 
-    await syncProductParams(
-
-      productId,
-
-      product.params
-
-    );
-
-  }
+  await syncProductParams(
+    productId,
+    product.params
+  );
 
 
   /**
-   * 9. Результат
+   * ============================================================
+   * 11. РЕЗУЛЬТАТ
+   * ============================================================
    */
+
+  console.log(
+    `✅ Product created: ${product.sourceOfferId}`
+  );
+
+
   return {
 
     productId,
@@ -267,9 +516,7 @@ export async function importProduct(
       product.price,
 
     status:
-      existing
-        ? "updated"
-        : "created",
+      "created",
 
   };
 
