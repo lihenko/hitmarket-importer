@@ -1,15 +1,24 @@
 import { db } from "./database/connection";
-import { getProductBySourceOffer } from "./database/products";
+import {
+  startImportRun,
+  finishImportRun,
+} from "./database/import-runs";
+
 
 async function main() {
   try {
-    const product = await getProductBySourceOffer(
-      "test",
-      "123"
-    );
+    const runId = await startImportRun("test-feed");
 
-    console.log("Product:");
-    console.log(product);
+    console.log("Import run ID:", runId);
+
+
+    await finishImportRun(runId, {
+      totalOffers: 0,
+      status: "completed",
+    });
+
+
+    console.log("Finished");
 
   } catch (error) {
     console.error(error);
