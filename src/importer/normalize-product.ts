@@ -44,11 +44,20 @@ export interface NormalizedProduct {
 
   sourceOfferId: string;
 
+  /**
+   * Оригінальна назва товару
+   * з фіда постачальника.
+   */
   name: string;
 
+  /**
+   * Українська назва товару
+   * з фіда постачальника.
+   *
+   * Використовується як основа
+   * для AI-рерайту.
+   */
   nameUa: string | null;
-
-  slug: string;
 
   price: number;
 
@@ -58,8 +67,17 @@ export interface NormalizedProduct {
 
   vendor: string | null;
 
+  /**
+   * Оригінальний опис постачальника.
+   */
   description: string | null;
 
+  /**
+   * Український опис з фіда.
+   *
+   * Використовується як основа
+   * для AI-рерайту.
+   */
   descriptionUa: string | null;
 
   category: {
@@ -78,122 +96,202 @@ export interface NormalizedProduct {
 }
 
 
+/**
+ * Нормалізує значення наявності товару.
+ *
+ * Пріоритет:
+ *
+ * 1. quantity
+ * 2. available
+ * 3. true, якщо обидва значення відсутні
+ */
+function normalizeAvailable(
+  product: SupplierProduct
+): boolean {
+
+  if (
+    product.quantity !== undefined
+  ) {
+
+    return product.quantity > 0;
+
+  }
+
+  return product.available ?? true;
+}
+
+
+/**
+ * Нормалізація товару.
+ *
+ * Тут НЕ створюємо slug.
+ *
+ * Slug буде створений пізніше,
+ * після AI-рерайту, на основі
+ * фінальної української назви.
+ */
 export function normalizeProduct(
   product: SupplierProduct
 ): NormalizedProduct {
 
   /**
-   * Визначаємо наявність.
-   *
-   * Якщо quantity переданий —
-   * використовуємо його.
-   *
-   * Якщо quantity немає —
-   * використовуємо available.
-   *
-   * Якщо немає ні quantity,
-   * ні available — вважаємо товар доступним.
+   * ----------------------------------------------------------
+   * Наявність
+   * ----------------------------------------------------------
    */
+
   const available =
-    product.quantity !== undefined
-      ? product.quantity > 0
-      : product.available ?? true;
+    normalizeAvailable(
+      product
+    );
 
 
   /**
-   * Повертаємо нормалізований товар.
+   * ----------------------------------------------------------
+   * Українська назва
+   * ----------------------------------------------------------
    */
+
+  const nameUa =
+    product.nameUa?.trim() ||
+    null;
+
+
+  /**
+   * ----------------------------------------------------------
+   * Ціна
+   *
+   * Ціна постачальника +20%.
+   * Округлення в більшу сторону.
+   * ----------------------------------------------------------
+   */
+
+  const price =
+    Math.ceil(
+      product.price * 1.2
+    );
+
+
+  /**
+   * ----------------------------------------------------------
+   * Стара ціна
+   *
+   * Якщо oldPrice відсутня —
+   * записуємо null.
+   * ----------------------------------------------------------
+   */
+
+  const oldPrice =
+    product.oldPrice !== undefined &&
+    product.oldPrice !== null
+      ? Math.ceil(
+          product.oldPrice * 1.2
+        )
+      : null;
+
+
+  /**
+   * ----------------------------------------------------------
+   * Оригінальний опис
+   * ----------------------------------------------------------
+   */
+
+  const description =
+    product.description?.trim() ||
+    null;
+
+
+  /**
+   * ----------------------------------------------------------
+   * Український опис
+   * ----------------------------------------------------------
+   */
+
+  const descriptionUa =
+    product.descriptionUa?.trim() ||
+    null;
+
+
+  /**
+   * ----------------------------------------------------------
+   * Характеристики
+   * ----------------------------------------------------------
+   */
+
+  const params =
+    product.params?.map(
+      item => ({
+
+        name:
+          item.name,
+
+        value:
+          item.value,
+
+        unit:
+          item.unit?.trim() ||
+          null,
+
+      })
+    ) ?? [];
+
+
+  /**
+   * ----------------------------------------------------------
+   * Результат нормалізації
+   * ----------------------------------------------------------
+   */
+
   return {
 
     source:
       product.source,
 
-
     sourceOfferId:
       product.sourceOfferId,
 
-
     /**
-     * Оригінальна назва постачальника.
+     * Оригінальна назва.
      */
     name:
       product.name,
 
-
     /**
      * Українська назва з фіда.
-     *
-     * Використовуватимемо її як джерело
-     * для AI-рерайту.
      */
-    nameUa:
-      product.nameUa ?? null,
-
+    nameUa,
 
     /**
-     * Slug створюємо з оригінальної назви.
-     *
-     * Поки що не використовуємо AI
-     * для slug.
+     * Нормалізована ціна.
      */
-    slug:
-      product.name
-        .toLowerCase()
-        .replace(/\s+/g, "-"),
-
+    price,
 
     /**
-     * Наша ціна:
-     * ціна постачальника + 20%.
+     * Нормалізована стара ціна.
      */
-    price:
-      Math.ceil(
-        product.price * 1.2
-      ),
-
+    oldPrice,
 
     /**
-     * Стара ціна:
-     * також +20%.
-     */
-    oldPrice:
-      product.oldPrice
-        ? Math.ceil(
-            product.oldPrice * 1.2
-          )
-        : null,
-
-
-    /**
-     * Наявність.
+     * Нормалізована наявність.
      */
     available,
-
 
     /**
      * Постачальник.
      */
     vendor:
-      product.vendor ?? null,
-
+      product.vendor?.trim() ||
+      null,
 
     /**
      * Оригінальний опис.
      */
-    description:
-      product.description ?? null,
-
+    description,
 
     /**
      * Український опис з фіда.
-     *
-     * Саме його будемо передавати
-     * в OpenAI для рерайту,
-     * якщо він доступний.
      */
-    descriptionUa:
-      product.descriptionUa ?? null,
-
+    descriptionUa,
 
     /**
      * Категорія.
@@ -201,32 +299,16 @@ export function normalizeProduct(
     category:
       product.category ?? null,
 
-
     /**
      * Зображення.
      */
     images:
       product.images ?? [],
 
-
     /**
      * Характеристики.
      */
-    params:
-      product.params?.map(
-        item => ({
-
-          name:
-            item.name,
-
-          value:
-            item.value,
-
-          unit:
-            item.unit ?? null,
-
-        })
-      ) ?? [],
+    params,
 
   };
 

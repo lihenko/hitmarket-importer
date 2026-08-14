@@ -37,7 +37,8 @@ export async function getProductParams(
 
 
 /**
- * Знайти характеристику
+ * Знайти характеристику товару
+ * за українською назвою.
  */
 export async function getProductParam(
   productId: number,
@@ -57,8 +58,8 @@ export async function getProductParam(
     ]
   );
 
-
-  const params = rows as ProductParam[];
+  const params =
+    rows as ProductParam[];
 
   return params[0] ?? null;
 }
@@ -67,15 +68,17 @@ export async function getProductParam(
 /**
  * Створити характеристику
  */
-export async function createProductParam(data: {
-  productId: number;
+export async function createProductParam(
+  data: {
+    productId: number;
 
-  name: string;
+    name: string;
 
-  value?: string | null;
+    value?: string | null;
 
-  unit?: string | null;
-}) {
+    unit?: string | null;
+  }
+) {
 
   const [result] = await db.query(
     `
@@ -90,17 +93,19 @@ export async function createProductParam(data: {
     `,
     [
       data.productId,
+
       data.name,
+
       data.value ?? null,
+
       data.unit ?? null,
     ]
   );
 
-
-  const insertResult = result as {
-    insertId: number;
-  };
-
+  const insertResult =
+    result as {
+      insertId: number;
+    };
 
   return insertResult.insertId;
 }
@@ -112,6 +117,8 @@ export async function createProductParam(data: {
 export async function updateProductParam(
   id: number,
   data: {
+    name?: string;
+
     value?: string | null;
 
     unit?: string | null;
@@ -122,34 +129,60 @@ export async function updateProductParam(
   const values: unknown[] = [];
 
 
+  if (data.name !== undefined) {
+
+    fields.push(
+      "name = ?"
+    );
+
+    values.push(
+      data.name
+    );
+  }
+
+
   if (data.value !== undefined) {
-    fields.push("value = ?");
-    values.push(data.value);
+
+    fields.push(
+      "value = ?"
+    );
+
+    values.push(
+      data.value
+    );
   }
 
 
   if (data.unit !== undefined) {
-    fields.push("unit = ?");
-    values.push(data.unit);
+
+    fields.push(
+      "unit = ?"
+    );
+
+    values.push(
+      data.unit
+    );
   }
 
 
   if (fields.length === 0) {
+
     return null;
   }
 
 
-  const [result] = await db.query(
-    `
-    UPDATE product_params
-    SET ${fields.join(", ")}
-    WHERE id = ?
-    `,
-    [
-      ...values,
-      id,
-    ]
-  );
+  const [result] =
+    await db.query(
+      `
+      UPDATE product_params
+      SET ${fields.join(", ")}
+      WHERE id = ?
+      `,
+      [
+        ...values,
+        id,
+      ]
+    );
 
 
   return result;
@@ -157,23 +190,39 @@ export async function updateProductParam(
 
 
 /**
- * Основна функція імпортера:
- * знайти або створити характеристику
+ * Створити або оновити характеристику.
+ *
+ * ВАЖЛИВО:
+ * name вже повинен бути українським.
  */
-export async function getOrCreateProductParam(data: {
-  productId: number;
+export async function getOrCreateProductParam(
+  data: {
+    productId: number;
 
-  name: string;
+    name: string;
 
-  value?: string | null;
+    value?: string | null;
 
-  unit?: string | null;
-}) {
+    unit?: string | null;
+  }
+) {
 
-  const existing = await getProductParam(
-    data.productId,
-    data.name
-  );
+  const name =
+    data.name.trim();
+
+  if (!name) {
+
+    throw new Error(
+      "Product parameter name cannot be empty"
+    );
+  }
+
+
+  const existing =
+    await getProductParam(
+      data.productId,
+      name
+    );
 
 
   if (existing) {
@@ -181,8 +230,11 @@ export async function getOrCreateProductParam(data: {
     await updateProductParam(
       existing.id,
       {
-        value: data.value,
-        unit: data.unit,
+        value:
+          data.value,
+
+        unit:
+          data.unit,
       }
     );
 
@@ -191,19 +243,41 @@ export async function getOrCreateProductParam(data: {
   }
 
 
-  return await createProductParam(data);
+  return await createProductParam({
+    productId:
+      data.productId,
+
+    name,
+
+    value:
+      data.value,
+
+    unit:
+      data.unit,
+  });
 }
 
 
 /**
- * Масове збереження характеристик
- * з фіда
+ * Масове збереження українських
+ * характеристик товару.
+ *
+ * Ця функція НЕ перекладає параметри.
+ *
+ * Вона очікує, що AI вже повернув:
+ *
+ * name  → українською
+ * value → українською, якщо це текстове значення
+ * unit  → українською
  */
 export async function syncProductParams(
   productId: number,
+
   params: Array<{
     name: string;
+
     value?: string | null;
+
     unit?: string | null;
   }>
 ) {
@@ -213,12 +287,28 @@ export async function syncProductParams(
 
   for (const param of params) {
 
-    const id = await getOrCreateProductParam({
-      productId,
-      name: param.name,
-      value: param.value,
-      unit: param.unit,
-    });
+    if (!param.name?.trim()) {
+
+      continue;
+    }
+
+
+    const id =
+      await getOrCreateProductParam({
+
+        productId,
+
+        name:
+          param.name.trim(),
+
+        value:
+          param.value?.trim() ||
+          null,
+
+        unit:
+          param.unit?.trim() ||
+          null,
+      });
 
 
     ids.push(id);

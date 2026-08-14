@@ -33,7 +33,111 @@ import {
   rewriteProduct,
 } from "../ai/rewrite-product";
 
+import {
+  translateCategoryName,
+} from "../ai/translate-category";
 
+
+/**
+ * ============================================================
+ * GENERATE SLUG
+ * ============================================================
+ *
+ * Створює slug з української назви товару.
+ *
+ * Наприклад:
+ *
+ * "Повербанк Lenyes PX163 10000 мАг"
+ *
+ * =>
+ *
+ * "poverbank-lenyes-px163-10000-mah"
+ */
+function generateSlug(
+  name: string
+): string {
+
+  const transliteration: Record<string, string> = {
+
+    а: "a",
+    б: "b",
+    в: "v",
+    г: "h",
+    ґ: "g",
+    д: "d",
+    е: "e",
+    є: "ye",
+    ж: "zh",
+    з: "z",
+    и: "y",
+    і: "i",
+    ї: "yi",
+    й: "y",
+    к: "k",
+    л: "l",
+    м: "m",
+    н: "n",
+    о: "o",
+    п: "p",
+    р: "r",
+    с: "s",
+    т: "t",
+    у: "u",
+    ф: "f",
+    х: "kh",
+    ц: "ts",
+    ч: "ch",
+    ш: "sh",
+    щ: "shch",
+    ь: "",
+    ю: "yu",
+    я: "ya",
+
+  };
+
+
+  return name
+    .toLowerCase()
+
+    .split("")
+
+    .map(
+      char =>
+        transliteration[char] ?? char
+    )
+
+    .join("")
+
+    .replace(
+      /[^a-z0-9\s-]/g,
+      ""
+    )
+
+    .replace(
+      /\s+/g,
+      "-"
+    )
+
+    .replace(
+      /-+/g,
+      "-"
+    )
+
+    .replace(
+      /^-+|-+$/g,
+      ""
+
+    )
+
+    || "product";
+}
+
+
+/**
+ * ============================================================
+ * IMPORT PRODUCT
+ * ============================================================
+ */
 export async function importProduct(
   supplierProduct: SupplierProduct
 ) {
@@ -52,7 +156,7 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 2. ШУКАЄМО ТОВАР У БАЗІ
+   * 2. ШУКАЄМО ТОВАР У БД
    * ============================================================
    */
 
@@ -68,23 +172,30 @@ export async function importProduct(
    * 3. ІСНУЮЧИЙ ТОВАР
    * ============================================================
    *
-   * Для існуючого товару НЕ робимо:
+   * Для існуючого товару:
    *
-   * - OpenAI
-   * - рерайт
-   * - зміну назви
-   * - зміну опису
-   * - зміну SEO
-   * - зміну config
-   * - завантаження картинок
-   * - синхронізацію характеристик
-   * - зміну категорії
+   * НЕ запускаємо AI.
    *
-   * Перевіряємо тільки:
+   * НЕ змінюємо:
+   *
+   * - назву
+   * - опис
+   * - SEO
+   * - slug
+   * - config
+   * - картинки
+   * - характеристики
+   *
+   * Оновлюємо:
    *
    * - price
    * - oldPrice
    * - available
+   *
+   * Додатково:
+   *
+   * якщо category_id = NULL,
+   * визначаємо та записуємо категорію.
    */
 
   if (existing) {
@@ -93,6 +204,7 @@ export async function importProduct(
       price?: number;
       oldPrice?: number | null;
       available?: boolean;
+      categoryId?: number | null;
     } = {};
 
 
@@ -149,7 +261,66 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * ОНОВЛЮЄМО ТІЛЬКИ ЯКЩО Є ЗМІНИ
+     * КАТЕГОРІЯ
+     * ----------------------------------------------------------
+     *
+     * Якщо категорія у товару вже є —
+     * нічого не робимо.
+     *
+     * Якщо category_id NULL —
+     * перекладаємо категорію та записуємо її.
+     */
+
+    if (
+      existing.category_id === null &&
+      product.category
+    ) {
+
+      console.log(
+        `📂 Translating category: ${product.category.name}`
+      );
+
+
+      const categoryNameUa =
+        await translateCategoryName(
+          product.category.name
+        );
+
+
+      console.log(
+        `📂 Category UA: ${categoryNameUa}`
+      );
+
+
+      const categoryId =
+        await getOrCreateCategory({
+
+          source:
+            product.source,
+
+          sourceCategoryId:
+            product.category.id,
+
+          name:
+            categoryNameUa,
+
+        });
+
+
+      changes.categoryId =
+        categoryId;
+
+
+      console.log(
+        `📂 Category ID: ${categoryId}`
+      );
+
+    }
+
+
+    /**
+     * ----------------------------------------------------------
+     * ОНОВЛЕННЯ
      * ----------------------------------------------------------
      */
 
@@ -165,17 +336,13 @@ export async function importProduct(
     }
 
 
-    /**
-     * Нічого більше з товаром
-     * не робимо.
-     */
-
     return {
 
       productId:
         existing.id,
 
       categoryId:
+        changes.categoryId ??
         existing.category_id,
 
       price:
@@ -196,16 +363,8 @@ export async function importProduct(
    * 4. НОВИЙ ТОВАР, АЛЕ НЕДОСТУПНИЙ
    * ============================================================
    *
-   * Якщо товар при першому імпорті
-   * має available=false —
-   *
-   * НЕ створюємо його в БД.
-   *
-   * НЕ запускаємо OpenAI.
-   *
-   * НЕ завантажуємо картинки.
-   *
-   * НЕ створюємо характеристики.
+   * Якщо товар unavailable при першому імпорті —
+   * взагалі нічого не створюємо.
    */
 
   if (
@@ -233,25 +392,16 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 5. OPENAI
+   * 5. AI REWRITE
    * ============================================================
    *
-   * На цьому етапі ми вже точно знаємо:
+   * AI генерує:
    *
-   * - товар новий
-   * - товар доступний
-   *
-   * Тому запускаємо AI.
-   *
-   * rewriteProduct() використовує:
-   *
-   * nameUa
-   * descriptionUa
-   *
-   * як основне джерело.
-   *
-   * Якщо українських даних немає —
-   * використовуються name / description.
+   * - nameUa
+   * - descriptionUa
+   * - seoTitle
+   * - seoDescription
+   * - paramsUa
    */
 
   console.log(
@@ -267,17 +417,34 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 6. ГЕНЕРАЦІЯ CONFIG
+   * 6. SLUG
    * ============================================================
    *
-   * generateProductConfig()
-   * поки що працює від NormalizedProduct.
+   * Slug генеруємо ПІСЛЯ AI.
    *
-   * Тому створюємо копію product,
-   * де підставляємо AI-контент.
+   * Джерело:
    *
-   * Оригінальний product
-   * при цьому не змінюємо.
+   * rewritten.nameUa
+   */
+
+  const slug =
+    generateSlug(
+      rewritten.nameUa
+    );
+
+
+  console.log(
+    `🔗 Slug: ${slug}`
+  );
+
+
+  /**
+   * ============================================================
+   * 7. CONFIG
+   * ============================================================
+   *
+   * Для config використовуємо
+   * українські AI-дані.
    */
 
   const productWithAiContent = {
@@ -287,13 +454,7 @@ export async function importProduct(
     name:
       rewritten.nameUa,
 
-    nameUa:
-      rewritten.nameUa,
-
     description:
-      rewritten.descriptionUa,
-
-    descriptionUa:
       rewritten.descriptionUa,
 
   };
@@ -307,15 +468,45 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 7. КАТЕГОРІЯ
+   * 8. КАТЕГОРІЯ
    * ============================================================
+   *
+   * Категорія з фіда може бути російською.
+   *
+   * Перекладаємо її перед записом у БД.
+   *
+   * Наприклад:
+   *
+   * "Электроинструменты"
+   *
+   * =>
+   *
+   * "Електроінструменти"
    */
 
   let categoryId:
     number | null = null;
 
 
-  if (product.category) {
+  if (
+    product.category
+  ) {
+
+    console.log(
+      `📂 Translating category: ${product.category.name}`
+    );
+
+
+    const categoryNameUa =
+      await translateCategoryName(
+        product.category.name
+      );
+
+
+    console.log(
+      `📂 Category UA: ${categoryNameUa}`
+    );
+
 
     categoryId =
       await getOrCreateCategory({
@@ -327,28 +518,36 @@ export async function importProduct(
           product.category.id,
 
         name:
-          product.category.name,
+          categoryNameUa,
 
       });
+
+
+    console.log(
+      `📂 Category ID: ${categoryId}`
+    );
 
   }
 
 
   /**
    * ============================================================
-   * 8. СТВОРЕННЯ ТОВАРУ
+   * 9. СТВОРЮЄМО ТОВАР
    * ============================================================
    *
-   * В БД записуємо:
+   * Нова структура БД:
    *
-   * name
-   * name_ua
-   * description
-   * description_ua
-   * SEO
-   * config
+   * products.name
+   *     = українська AI назва
    *
-   * український контент — результат AI.
+   * products.description
+   *     = український AI опис
+   *
+   * products.category_id
+   *     = ID категорії
+   *
+   * name_ua / description_ua
+   * більше НЕ використовуються.
    */
 
   const result =
@@ -361,13 +560,9 @@ export async function importProduct(
         product.sourceOfferId,
 
       name:
-        product.name,
-
-      nameUa:
         rewritten.nameUa,
 
-      slug:
-        product.slug,
+      slug,
 
       price:
         product.price,
@@ -378,13 +573,12 @@ export async function importProduct(
       available:
         product.available,
 
+      categoryId,
+
       vendor:
         product.vendor,
 
       description:
-        product.description,
-
-      descriptionUa:
         rewritten.descriptionUa,
 
       seoTitle:
@@ -398,6 +592,12 @@ export async function importProduct(
     });
 
 
+  /**
+   * ============================================================
+   * 10. PRODUCT ID
+   * ============================================================
+   */
+
   const insert =
     result as {
       insertId: number;
@@ -410,21 +610,10 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 9. ЗОБРАЖЕННЯ
+   * 11. ЗОБРАЖЕННЯ
    * ============================================================
    *
    * Тільки для нового товару.
-   *
-   * saveProductImage():
-   *
-   * WebP → зберігаємо без перекодування
-   *
-   * JPG / PNG / інший формат
-   * → конвертуємо в WebP
-   *
-   * Результат:
-   *
-   * /powerbank-landing/public/products/
    */
 
   for (
@@ -437,9 +626,17 @@ export async function importProduct(
 
     try {
 
-      const fileName =
-        `${product.slug}-${index}`;
+      /**
+       * Файл називаємо за slug.
+       */
 
+      const fileName =
+        `${slug}-${index}`;
+
+
+      /**
+       * Завантаження / конвертація.
+       */
 
       const localPath =
         await saveProductImage(
@@ -447,6 +644,10 @@ export async function importProduct(
           fileName
         );
 
+
+      /**
+       * Запис у БД.
+       */
 
       await getOrCreateProductImage({
 
@@ -483,21 +684,35 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 10. ХАРАКТЕРИСТИКИ
+   * 12. УКРАЇНСЬКІ ХАРАКТЕРИСТИКИ
    * ============================================================
    *
-   * Тільки для нового товару.
+   * НЕ використовуємо:
+   *
+   * product.params
+   *
+   * тому що це оригінальні параметри постачальника.
+   *
+   * Використовуємо:
+   *
+   * rewritten.paramsUa
+   *
+   * де AI вже переклав:
+   *
+   * - name
+   * - value
+   * - unit
    */
 
   await syncProductParams(
     productId,
-    product.params
+    rewritten.paramsUa
   );
 
 
   /**
    * ============================================================
-   * 11. РЕЗУЛЬТАТ
+   * 13. РЕЗУЛЬТАТ
    * ============================================================
    */
 

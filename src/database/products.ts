@@ -1,5 +1,6 @@
 import { db } from "./connection";
 
+
 export interface Product {
   id: number;
 
@@ -10,7 +11,6 @@ export interface Product {
 
   // Basic product data
   name: string;
-  name_ua: string | null;
   slug: string;
 
   // Price / availability
@@ -18,14 +18,15 @@ export interface Product {
   old_price: number | null;
   available: boolean;
 
-  // Supplier information
+  // Category
   category_id: number | null;
+
+  // Supplier information
   vendor: string | null;
   country_of_origin: string | null;
 
-  // Original supplier content
+  // Content
   description: string | null;
-  description_ua: string | null;
 
   // Generated landing content
   config: Record<string, unknown> | null;
@@ -49,19 +50,34 @@ export interface Product {
 }
 
 
+/**
+ * ============================================================
+ * GET PRODUCTS COUNT
+ * ============================================================
+ */
 export async function getProductsCount() {
+
   const [rows] = await db.query(
-    "SELECT COUNT(*) as count FROM products"
+    `
+    SELECT COUNT(*) as count
+    FROM products
+    `
   );
 
   return rows;
 }
 
 
+/**
+ * ============================================================
+ * GET PRODUCT BY SOURCE OFFER
+ * ============================================================
+ */
 export async function getProductBySourceOffer(
   source: string,
   sourceOfferId: string
 ) {
+
   const [rows] = await db.query(
     `
     SELECT *
@@ -70,40 +86,59 @@ export async function getProductBySourceOffer(
     AND source_offer_id = ?
     LIMIT 1
     `,
-    [source, sourceOfferId]
+    [
+      source,
+      sourceOfferId,
+    ]
   );
 
-  const products = rows as Product[];
+  const products =
+    rows as Product[];
 
   return products[0] ?? null;
 }
 
 
+/**
+ * ============================================================
+ * CREATE PRODUCT
+ * ============================================================
+ */
 export async function createProduct(product: {
   source: string;
+
   sourceOfferId: string;
+
   vendorCode?: string | null;
 
   name: string;
-  nameUa?: string | null;
+
   slug: string;
 
   price: number;
+
   oldPrice?: number | null;
 
   available?: boolean;
 
+  /**
+   * ID категорії з таблиці categories.
+   */
+  categoryId?: number | null;
+
   vendor?: string | null;
+
   countryOfOrigin?: string | null;
 
   description?: string | null;
-  descriptionUa?: string | null;
 
   seoTitle?: string | null;
+
   seoDescription?: string | null;
 
   config?: Record<string, unknown> | null;
 }) {
+
   const [result] = await db.query(
     `
     INSERT INTO products
@@ -113,18 +148,18 @@ export async function createProduct(product: {
       vendor_code,
 
       name,
-      name_ua,
       slug,
 
       price,
       old_price,
       available,
 
+      category_id,
+
       vendor,
       country_of_origin,
 
       description,
-      description_ua,
 
       seo_title,
       seo_description,
@@ -132,34 +167,51 @@ export async function createProduct(product: {
       config
     )
     VALUES
-    (?, ?, ?,
-     ?, ?, ?,
-     ?, ?, ?,
-     ?, ?,
-     ?, ?,
-     ?, ?,
-     ?)
+    (
+      ?, ?, ?,
+
+      ?, ?,
+
+      ?, ?, ?,
+
+      ?,
+
+      ?, ?,
+
+      ?,
+
+      ?, ?,
+
+      ?
+    )
     `,
     [
       product.source,
+
       product.sourceOfferId,
+
       product.vendorCode ?? null,
 
       product.name,
-      product.nameUa ?? null,
+
       product.slug,
 
       product.price,
+
       product.oldPrice ?? null,
+
       product.available ? 1 : 0,
 
+      product.categoryId ?? null,
+
       product.vendor ?? null,
+
       product.countryOfOrigin ?? null,
 
       product.description ?? null,
-      product.descriptionUa ?? null,
 
       product.seoTitle ?? null,
+
       product.seoDescription ?? null,
 
       product.config
@@ -171,29 +223,61 @@ export async function createProduct(product: {
   return result;
 }
 
+
+/**
+ * ============================================================
+ * UPDATE PRODUCT
+ * ============================================================
+ *
+ * Для існуючого товару можна оновлювати:
+ *
+ * - назву
+ * - slug
+ * - ціну
+ * - стару ціну
+ * - наявність
+ * - категорію
+ * - постачальника
+ * - країну
+ * - опис
+ * - SEO
+ * - config
+ * - статус генерації
+ *
+ * Зображення та параметри тут НЕ обробляються.
+ */
 export async function updateProduct(
   id: number,
   product: {
+
     name?: string;
-    nameUa?: string | null;
+
     slug?: string;
 
     price?: number;
+
     oldPrice?: number | null;
+
     available?: boolean;
 
+    /**
+     * ID категорії з таблиці categories.
+     */
+    categoryId?: number | null;
+
     vendor?: string | null;
+
     countryOfOrigin?: string | null;
 
     description?: string | null;
-    descriptionUa?: string | null;
 
     seoTitle?: string | null;
+
     seoDescription?: string | null;
 
     config?: Record<string, unknown> | null;
 
-    contentStatus?: 
+    contentStatus?:
       | "pending"
       | "generated"
       | "error"
@@ -204,95 +288,310 @@ export async function updateProduct(
     contentGeneratedAt?: Date | null;
   }
 ) {
+
   const fields: string[] = [];
+
   const values: unknown[] = [];
 
-  if (product.name !== undefined) {
-    fields.push("name = ?");
-    values.push(product.name);
+
+  /**
+   * ----------------------------------------------------------
+   * NAME
+   * ----------------------------------------------------------
+   */
+  if (
+    product.name !== undefined
+  ) {
+
+    fields.push(
+      "name = ?"
+    );
+
+    values.push(
+      product.name
+    );
   }
 
-  if (product.nameUa !== undefined) {
-    fields.push("name_ua = ?");
-    values.push(product.nameUa);
+
+  /**
+   * ----------------------------------------------------------
+   * SLUG
+   * ----------------------------------------------------------
+   */
+  if (
+    product.slug !== undefined
+  ) {
+
+    fields.push(
+      "slug = ?"
+    );
+
+    values.push(
+      product.slug
+    );
   }
 
-  if (product.slug !== undefined) {
-    fields.push("slug = ?");
-    values.push(product.slug);
+
+  /**
+   * ----------------------------------------------------------
+   * PRICE
+   * ----------------------------------------------------------
+   */
+  if (
+    product.price !== undefined
+  ) {
+
+    fields.push(
+      "price = ?"
+    );
+
+    values.push(
+      product.price
+    );
   }
 
-  if (product.price !== undefined) {
-    fields.push("price = ?");
-    values.push(product.price);
+
+  /**
+   * ----------------------------------------------------------
+   * OLD PRICE
+   * ----------------------------------------------------------
+   */
+  if (
+    product.oldPrice !== undefined
+  ) {
+
+    fields.push(
+      "old_price = ?"
+    );
+
+    values.push(
+      product.oldPrice
+    );
   }
 
-  if (product.oldPrice !== undefined) {
-    fields.push("old_price = ?");
-    values.push(product.oldPrice);
+
+  /**
+   * ----------------------------------------------------------
+   * AVAILABLE
+   * ----------------------------------------------------------
+   */
+  if (
+    product.available !== undefined
+  ) {
+
+    fields.push(
+      "available = ?"
+    );
+
+    values.push(
+      product.available
+        ? 1
+        : 0
+    );
   }
 
-  if (product.available !== undefined) {
-    fields.push("available = ?");
-    values.push(product.available ? 1 : 0);
+
+  /**
+   * ----------------------------------------------------------
+   * CATEGORY
+   * ----------------------------------------------------------
+   */
+  if (
+    product.categoryId !== undefined
+  ) {
+
+    fields.push(
+      "category_id = ?"
+    );
+
+    values.push(
+      product.categoryId
+    );
   }
 
-  if (product.vendor !== undefined) {
-    fields.push("vendor = ?");
-    values.push(product.vendor);
+
+  /**
+   * ----------------------------------------------------------
+   * VENDOR
+   * ----------------------------------------------------------
+   */
+  if (
+    product.vendor !== undefined
+  ) {
+
+    fields.push(
+      "vendor = ?"
+    );
+
+    values.push(
+      product.vendor
+    );
   }
 
-  if (product.countryOfOrigin !== undefined) {
-    fields.push("country_of_origin = ?");
-    values.push(product.countryOfOrigin);
+
+  /**
+   * ----------------------------------------------------------
+   * COUNTRY
+   * ----------------------------------------------------------
+   */
+  if (
+    product.countryOfOrigin !== undefined
+  ) {
+
+    fields.push(
+      "country_of_origin = ?"
+    );
+
+    values.push(
+      product.countryOfOrigin
+    );
   }
 
-  if (product.description !== undefined) {
-    fields.push("description = ?");
-    values.push(product.description);
+
+  /**
+   * ----------------------------------------------------------
+   * DESCRIPTION
+   * ----------------------------------------------------------
+   */
+  if (
+    product.description !== undefined
+  ) {
+
+    fields.push(
+      "description = ?"
+    );
+
+    values.push(
+      product.description
+    );
   }
 
-  if (product.descriptionUa !== undefined) {
-    fields.push("description_ua = ?");
-    values.push(product.descriptionUa);
+
+  /**
+   * ----------------------------------------------------------
+   * SEO TITLE
+   * ----------------------------------------------------------
+   */
+  if (
+    product.seoTitle !== undefined
+  ) {
+
+    fields.push(
+      "seo_title = ?"
+    );
+
+    values.push(
+      product.seoTitle
+    );
   }
 
-  if (product.seoTitle !== undefined) {
-    fields.push("seo_title = ?");
-    values.push(product.seoTitle);
+
+  /**
+   * ----------------------------------------------------------
+   * SEO DESCRIPTION
+   * ----------------------------------------------------------
+   */
+  if (
+    product.seoDescription !== undefined
+  ) {
+
+    fields.push(
+      "seo_description = ?"
+    );
+
+    values.push(
+      product.seoDescription
+    );
   }
 
-  if (product.seoDescription !== undefined) {
-    fields.push("seo_description = ?");
-    values.push(product.seoDescription);
-  }
 
-  if (product.config !== undefined) {
-    fields.push("config = ?");
+  /**
+   * ----------------------------------------------------------
+   * CONFIG
+   * ----------------------------------------------------------
+   */
+  if (
+    product.config !== undefined
+  ) {
+
+    fields.push(
+      "config = ?"
+    );
+
     values.push(
       product.config
-        ? JSON.stringify(product.config)
+        ? JSON.stringify(
+            product.config
+          )
         : null
     );
   }
 
-  if (product.contentStatus !== undefined) {
-    fields.push("content_status = ?");
-    values.push(product.contentStatus);
+
+  /**
+   * ----------------------------------------------------------
+   * CONTENT STATUS
+   * ----------------------------------------------------------
+   */
+  if (
+    product.contentStatus !== undefined
+  ) {
+
+    fields.push(
+      "content_status = ?"
+    );
+
+    values.push(
+      product.contentStatus
+    );
   }
 
-  if (product.contentError !== undefined) {
-    fields.push("content_error = ?");
-    values.push(product.contentError);
+
+  /**
+   * ----------------------------------------------------------
+   * CONTENT ERROR
+   * ----------------------------------------------------------
+   */
+  if (
+    product.contentError !== undefined
+  ) {
+
+    fields.push(
+      "content_error = ?"
+    );
+
+    values.push(
+      product.contentError
+    );
   }
 
-  if (product.contentGeneratedAt !== undefined) {
-    fields.push("content_generated_at = ?");
-    values.push(product.contentGeneratedAt);
+
+  /**
+   * ----------------------------------------------------------
+   * CONTENT GENERATED AT
+   * ----------------------------------------------------------
+   */
+  if (
+    product.contentGeneratedAt !== undefined
+  ) {
+
+    fields.push(
+      "content_generated_at = ?"
+    );
+
+    values.push(
+      product.contentGeneratedAt
+    );
   }
 
 
-  if (fields.length === 0) {
+  /**
+   * Нічого оновлювати.
+   */
+  if (
+    fields.length === 0
+  ) {
+
     return null;
   }
 
@@ -305,6 +604,7 @@ export async function updateProduct(
     `,
     [
       ...values,
+
       id,
     ]
   );
