@@ -70,7 +70,7 @@ async function main() {
     const testProducts =
       products.slice(
         0,
-        10
+        30
       );
 
 

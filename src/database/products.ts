@@ -1,5 +1,9 @@
 import { db } from "./connection";
 
+import type {
+  ProductConfig,
+} from "../importer/generate-config";
+
 
 export interface Product {
   id: number;
@@ -29,7 +33,7 @@ export interface Product {
   description: string | null;
 
   // Generated landing content
-  config: Record<string, unknown> | null;
+  config: ProductConfig | null;
 
   // SEO
   seo_title: string | null;
@@ -55,6 +59,7 @@ export interface Product {
  * GET PRODUCTS COUNT
  * ============================================================
  */
+
 export async function getProductsCount() {
 
   const [rows] = await db.query(
@@ -73,6 +78,7 @@ export async function getProductsCount() {
  * GET PRODUCT BY SOURCE OFFER
  * ============================================================
  */
+
 export async function getProductBySourceOffer(
   source: string,
   sourceOfferId: string
@@ -104,7 +110,9 @@ export async function getProductBySourceOffer(
  * CREATE PRODUCT
  * ============================================================
  */
+
 export async function createProduct(product: {
+
   source: string;
 
   sourceOfferId: string;
@@ -136,7 +144,8 @@ export async function createProduct(product: {
 
   seoDescription?: string | null;
 
-  config?: Record<string, unknown> | null;
+  config?: ProductConfig | null;
+
 }) {
 
   const [result] = await db.query(
@@ -246,6 +255,7 @@ export async function createProduct(product: {
  *
  * Зображення та параметри тут НЕ обробляються.
  */
+
 export async function updateProduct(
   id: number,
   product: {
@@ -275,7 +285,7 @@ export async function updateProduct(
 
     seoDescription?: string | null;
 
-    config?: Record<string, unknown> | null;
+    config?: ProductConfig | null;
 
     contentStatus?:
       | "pending"
@@ -286,6 +296,7 @@ export async function updateProduct(
     contentError?: string | null;
 
     contentGeneratedAt?: Date | null;
+
   }
 ) {
 
@@ -299,6 +310,7 @@ export async function updateProduct(
    * NAME
    * ----------------------------------------------------------
    */
+
   if (
     product.name !== undefined
   ) {
@@ -310,6 +322,7 @@ export async function updateProduct(
     values.push(
       product.name
     );
+
   }
 
 
@@ -318,6 +331,7 @@ export async function updateProduct(
    * SLUG
    * ----------------------------------------------------------
    */
+
   if (
     product.slug !== undefined
   ) {
@@ -329,6 +343,7 @@ export async function updateProduct(
     values.push(
       product.slug
     );
+
   }
 
 
@@ -337,6 +352,7 @@ export async function updateProduct(
    * PRICE
    * ----------------------------------------------------------
    */
+
   if (
     product.price !== undefined
   ) {
@@ -348,6 +364,7 @@ export async function updateProduct(
     values.push(
       product.price
     );
+
   }
 
 
@@ -356,6 +373,7 @@ export async function updateProduct(
    * OLD PRICE
    * ----------------------------------------------------------
    */
+
   if (
     product.oldPrice !== undefined
   ) {
@@ -367,6 +385,7 @@ export async function updateProduct(
     values.push(
       product.oldPrice
     );
+
   }
 
 
@@ -375,6 +394,7 @@ export async function updateProduct(
    * AVAILABLE
    * ----------------------------------------------------------
    */
+
   if (
     product.available !== undefined
   ) {
@@ -388,6 +408,7 @@ export async function updateProduct(
         ? 1
         : 0
     );
+
   }
 
 
@@ -396,6 +417,7 @@ export async function updateProduct(
    * CATEGORY
    * ----------------------------------------------------------
    */
+
   if (
     product.categoryId !== undefined
   ) {
@@ -407,6 +429,7 @@ export async function updateProduct(
     values.push(
       product.categoryId
     );
+
   }
 
 
@@ -414,7 +437,8 @@ export async function updateProduct(
    * ----------------------------------------------------------
    * VENDOR
    * ----------------------------------------------------------
-   */
+ */
+
   if (
     product.vendor !== undefined
   ) {
@@ -426,6 +450,7 @@ export async function updateProduct(
     values.push(
       product.vendor
     );
+
   }
 
 
@@ -434,6 +459,7 @@ export async function updateProduct(
    * COUNTRY
    * ----------------------------------------------------------
    */
+
   if (
     product.countryOfOrigin !== undefined
   ) {
@@ -445,6 +471,7 @@ export async function updateProduct(
     values.push(
       product.countryOfOrigin
     );
+
   }
 
 
@@ -453,6 +480,7 @@ export async function updateProduct(
    * DESCRIPTION
    * ----------------------------------------------------------
    */
+
   if (
     product.description !== undefined
   ) {
@@ -464,6 +492,7 @@ export async function updateProduct(
     values.push(
       product.description
     );
+
   }
 
 
@@ -472,6 +501,7 @@ export async function updateProduct(
    * SEO TITLE
    * ----------------------------------------------------------
    */
+
   if (
     product.seoTitle !== undefined
   ) {
@@ -483,6 +513,7 @@ export async function updateProduct(
     values.push(
       product.seoTitle
     );
+
   }
 
 
@@ -491,6 +522,7 @@ export async function updateProduct(
    * SEO DESCRIPTION
    * ----------------------------------------------------------
    */
+
   if (
     product.seoDescription !== undefined
   ) {
@@ -502,6 +534,7 @@ export async function updateProduct(
     values.push(
       product.seoDescription
     );
+
   }
 
 
@@ -510,6 +543,7 @@ export async function updateProduct(
    * CONFIG
    * ----------------------------------------------------------
    */
+
   if (
     product.config !== undefined
   ) {
@@ -525,6 +559,7 @@ export async function updateProduct(
           )
         : null
     );
+
   }
 
 
@@ -533,6 +568,7 @@ export async function updateProduct(
    * CONTENT STATUS
    * ----------------------------------------------------------
    */
+
   if (
     product.contentStatus !== undefined
   ) {
@@ -544,6 +580,7 @@ export async function updateProduct(
     values.push(
       product.contentStatus
     );
+
   }
 
 
@@ -552,6 +589,7 @@ export async function updateProduct(
    * CONTENT ERROR
    * ----------------------------------------------------------
    */
+
   if (
     product.contentError !== undefined
   ) {
@@ -563,6 +601,7 @@ export async function updateProduct(
     values.push(
       product.contentError
     );
+
   }
 
 
@@ -571,6 +610,7 @@ export async function updateProduct(
    * CONTENT GENERATED AT
    * ----------------------------------------------------------
    */
+
   if (
     product.contentGeneratedAt !== undefined
   ) {
@@ -582,19 +622,30 @@ export async function updateProduct(
     values.push(
       product.contentGeneratedAt
     );
+
   }
 
 
   /**
-   * Нічого оновлювати.
+   * ----------------------------------------------------------
+   * NOTHING TO UPDATE
+   * ----------------------------------------------------------
    */
+
   if (
     fields.length === 0
   ) {
 
     return null;
+
   }
 
+
+  /**
+   * ----------------------------------------------------------
+   * UPDATE
+   * ----------------------------------------------------------
+   */
 
   const [result] = await db.query(
     `
@@ -604,7 +655,6 @@ export async function updateProduct(
     `,
     [
       ...values,
-
       id,
     ]
   );

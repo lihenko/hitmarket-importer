@@ -42,17 +42,8 @@ import {
  * ============================================================
  * GENERATE SLUG
  * ============================================================
- *
- * Створює slug з української назви товару.
- *
- * Наприклад:
- *
- * "Повербанк Lenyes PX163 10000 мАг"
- *
- * =>
- *
- * "poverbank-lenyes-px163-10000-mah"
  */
+
 function generateSlug(
   name: string
 ): string {
@@ -126,7 +117,6 @@ function generateSlug(
     .replace(
       /^-+|-+$/g,
       ""
-
     )
 
     || "product";
@@ -138,13 +128,14 @@ function generateSlug(
  * IMPORT PRODUCT
  * ============================================================
  */
+
 export async function importProduct(
   supplierProduct: SupplierProduct
 ) {
 
   /**
    * ============================================================
-   * 1. НОРМАЛІЗАЦІЯ
+   * 1. NORMALIZE
    * ============================================================
    */
 
@@ -156,7 +147,7 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 2. ШУКАЄМО ТОВАР У БД
+   * 2. CHECK EXISTING PRODUCT
    * ============================================================
    */
 
@@ -169,33 +160,19 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 3. ІСНУЮЧИЙ ТОВАР
+   * 3. EXISTING PRODUCT
    * ============================================================
    *
-   * Для існуючого товару:
+   * AI НЕ запускаємо.
    *
-   * НЕ запускаємо AI.
-   *
-   * НЕ змінюємо:
-   *
-   * - назву
-   * - опис
-   * - SEO
-   * - slug
-   * - config
-   * - картинки
-   * - характеристики
-   *
-   * Оновлюємо:
+   * Для існуючого товару оновлюємо тільки:
    *
    * - price
    * - oldPrice
    * - available
    *
-   * Додатково:
-   *
-   * якщо category_id = NULL,
-   * визначаємо та записуємо категорію.
+   * Якщо category_id = NULL —
+   * визначаємо категорію.
    */
 
   if (existing) {
@@ -210,7 +187,7 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * ЦІНА
+     * PRICE
      * ----------------------------------------------------------
      */
 
@@ -227,7 +204,7 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * СТАРА ЦІНА
+     * OLD PRICE
      * ----------------------------------------------------------
      */
 
@@ -244,7 +221,7 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * НАЯВНІСТЬ
+     * AVAILABLE
      * ----------------------------------------------------------
      */
 
@@ -261,14 +238,8 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * КАТЕГОРІЯ
+     * CATEGORY
      * ----------------------------------------------------------
-     *
-     * Якщо категорія у товару вже є —
-     * нічого не робимо.
-     *
-     * Якщо category_id NULL —
-     * перекладаємо категорію та записуємо її.
      */
 
     if (
@@ -320,7 +291,7 @@ export async function importProduct(
 
     /**
      * ----------------------------------------------------------
-     * ОНОВЛЕННЯ
+     * UPDATE
      * ----------------------------------------------------------
      */
 
@@ -360,11 +331,12 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 4. НОВИЙ ТОВАР, АЛЕ НЕДОСТУПНИЙ
+   * 4. NEW PRODUCT BUT UNAVAILABLE
    * ============================================================
    *
-   * Якщо товар unavailable при першому імпорті —
-   * взагалі нічого не створюємо.
+   * Новий unavailable товар взагалі не створюємо.
+   *
+   * AI також НЕ запускаємо.
    */
 
   if (
@@ -392,20 +364,31 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 5. AI REWRITE
+   * 5. AI GENERATION
    * ============================================================
    *
-   * AI генерує:
+   * Один OpenAI request.
+   *
+   * rewriteProduct() генерує:
    *
    * - nameUa
    * - descriptionUa
    * - seoTitle
    * - seoDescription
    * - paramsUa
+   * - badgeText
+   * - heroDescription
+   * - features
+   * - compact
+   * - ports
+   * - package
+   * - specifications
+   * - faq
+   * - reviews
    */
 
   console.log(
-    `🤖 Generating content: ${product.sourceOfferId}`
+    `🤖 Generating complete product content: ${product.sourceOfferId}`
   );
 
 
@@ -419,12 +402,6 @@ export async function importProduct(
    * ============================================================
    * 6. SLUG
    * ============================================================
-   *
-   * Slug генеруємо ПІСЛЯ AI.
-   *
-   * Джерело:
-   *
-   * rewritten.nameUa
    */
 
   const slug =
@@ -440,48 +417,40 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 7. CONFIG
+   * 7. GENERATE CONFIG
    * ============================================================
    *
-   * Для config використовуємо
-   * українські AI-дані.
+   * ВАЖЛИВО:
+   *
+   * generateProductConfig() НЕ викликає OpenAI.
+   *
+   * Він отримує:
+   *
+   * 1. оригінальний normalized product;
+   * 2. вже готовий результат rewriteProduct().
    */
 
-  const productWithAiContent = {
-
-    ...product,
-
-    name:
-      rewritten.nameUa,
-
-    description:
-      rewritten.descriptionUa,
-
-  };
+  console.log(
+    `⚙️ Generating product config...`
+  );
 
 
   const config =
     generateProductConfig(
-      productWithAiContent
+      product,
+      rewritten
     );
+
+
+  console.log(
+    `✅ Product config generated`
+  );
 
 
   /**
    * ============================================================
-   * 8. КАТЕГОРІЯ
+   * 8. CATEGORY
    * ============================================================
-   *
-   * Категорія з фіда може бути російською.
-   *
-   * Перекладаємо її перед записом у БД.
-   *
-   * Наприклад:
-   *
-   * "Электроинструменты"
-   *
-   * =>
-   *
-   * "Електроінструменти"
    */
 
   let categoryId:
@@ -532,22 +501,8 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 9. СТВОРЮЄМО ТОВАР
+   * 9. CREATE PRODUCT
    * ============================================================
-   *
-   * Нова структура БД:
-   *
-   * products.name
-   *     = українська AI назва
-   *
-   * products.description
-   *     = український AI опис
-   *
-   * products.category_id
-   *     = ID категорії
-   *
-   * name_ua / description_ua
-   * більше НЕ використовуються.
    */
 
   const result =
@@ -608,9 +563,20 @@ export async function importProduct(
     insert.insertId;
 
 
+  if (
+    !productId
+  ) {
+
+    throw new Error(
+      `Failed to get product ID for ${product.sourceOfferId}.`
+    );
+
+  }
+
+
   /**
    * ============================================================
-   * 11. ЗОБРАЖЕННЯ
+   * 11. IMAGES
    * ============================================================
    *
    * Тільки для нового товару.
@@ -626,17 +592,9 @@ export async function importProduct(
 
     try {
 
-      /**
-       * Файл називаємо за slug.
-       */
-
       const fileName =
         `${slug}-${index}`;
 
-
-      /**
-       * Завантаження / конвертація.
-       */
 
       const localPath =
         await saveProductImage(
@@ -644,10 +602,6 @@ export async function importProduct(
           fileName
         );
 
-
-      /**
-       * Запис у БД.
-       */
 
       await getOrCreateProductImage({
 
@@ -684,24 +638,16 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 12. УКРАЇНСЬКІ ХАРАКТЕРИСТИКИ
+   * 12. PRODUCT PARAMETERS
    * ============================================================
    *
-   * НЕ використовуємо:
+   * У БД записуємо AI-перекладені параметри.
    *
    * product.params
-   *
-   * тому що це оригінальні параметри постачальника.
-   *
-   * Використовуємо:
+   *     = оригінальні параметри постачальника
    *
    * rewritten.paramsUa
-   *
-   * де AI вже переклав:
-   *
-   * - name
-   * - value
-   * - unit
+   *     = фінальні українські параметри
    */
 
   await syncProductParams(
@@ -712,12 +658,27 @@ export async function importProduct(
 
   /**
    * ============================================================
-   * 13. РЕЗУЛЬТАТ
+   * 13. SUCCESS
    * ============================================================
    */
 
   console.log(
     `✅ Product created: ${product.sourceOfferId}`
+  );
+
+
+  console.log(
+    `🆔 Product ID: ${productId}`
+  );
+
+
+  console.log(
+    `📋 Params: ${rewritten.paramsUa.length}`
+  );
+
+
+  console.log(
+    `⚙️ Config: generated`
   );
 
 

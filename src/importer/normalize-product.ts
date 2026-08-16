@@ -166,10 +166,7 @@ export function normalizeProduct(
    * ----------------------------------------------------------
    */
 
-  const price =
-    Math.ceil(
-      product.price * 1.2
-    );
+  const price = product.price ;
 
 
   /**
@@ -184,9 +181,8 @@ export function normalizeProduct(
   const oldPrice =
     product.oldPrice !== undefined &&
     product.oldPrice !== null
-      ? Math.ceil(
-          product.oldPrice * 1.2
-        )
+      ? product.oldPrice 
+        
       : null;
 
 
