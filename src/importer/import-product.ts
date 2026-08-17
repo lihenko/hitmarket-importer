@@ -420,14 +420,12 @@ export async function importProduct(
    * 7. GENERATE CONFIG
    * ============================================================
    *
-   * ВАЖЛИВО:
-   *
    * generateProductConfig() НЕ викликає OpenAI.
    *
    * Він отримує:
    *
-   * 1. оригінальний normalized product;
-   * 2. вже готовий результат rewriteProduct().
+   * 1. normalized product;
+   * 2. результат rewriteProduct().
    */
 
   console.log(
@@ -579,8 +577,23 @@ export async function importProduct(
    * 11. IMAGES
    * ============================================================
    *
-   * Тільки для нового товару.
+   * ВАЖЛИВО:
+   *
+   * saveProductImage() може повернути null,
+   * якщо зображення менше 400×400.
+   *
+   * У такому випадку:
+   *
+   * ❌ файл НЕ зберігаємо;
+   * ❌ запис у product_images НЕ створюємо;
+   * ❌ sortOrder НЕ збільшуємо.
+   *
+   * У БД потрапляють тільки реально
+   * завантажені та валідні зображення.
    */
+
+  let sortOrder = 1;
+
 
   for (
     const [
@@ -592,9 +605,29 @@ export async function importProduct(
 
     try {
 
+      console.log(
+        `🖼️ Processing image ${index + 1}/${product.images.length}`
+      );
+
+
+      /**
+       * --------------------------------------------------------
+       * FILE NAME
+       * --------------------------------------------------------
+       */
+
       const fileName =
         `${slug}-${index}`;
 
+
+      /**
+       * --------------------------------------------------------
+       * DOWNLOAD + VALIDATE + SAVE
+       * --------------------------------------------------------
+       *
+       * Якщо зображення менше 400×400,
+       * функція поверне null.
+       */
 
       const localPath =
         await saveProductImage(
@@ -602,6 +635,38 @@ export async function importProduct(
           fileName
         );
 
+
+      /**
+       * --------------------------------------------------------
+       * SKIP INVALID IMAGE
+       * --------------------------------------------------------
+       *
+       * КРИТИЧНО:
+       *
+       * Не передаємо null у getOrCreateProductImage().
+       */
+
+      if (
+        !localPath
+      ) {
+
+        console.log(
+          `⏭️ Image ${index + 1} skipped`
+        );
+
+        continue;
+
+      }
+
+
+      /**
+       * --------------------------------------------------------
+       * SAVE IMAGE RECORD
+       * --------------------------------------------------------
+       *
+       * У БД потрапляють тільки зображення,
+       * які реально були збережені локально.
+       */
 
       await getOrCreateProductImage({
 
@@ -612,8 +677,7 @@ export async function importProduct(
 
         localPath,
 
-        sortOrder:
-          index + 1,
+        sortOrder,
 
       });
 
@@ -621,6 +685,18 @@ export async function importProduct(
       console.log(
         `🖼️ Image ${index + 1} saved: ${localPath}`
       );
+
+
+      /**
+       * --------------------------------------------------------
+       * NEXT SORT ORDER
+       * --------------------------------------------------------
+       *
+       * Збільшуємо тільки після успішного
+       * запису зображення.
+       */
+
+      sortOrder++;
 
 
     } catch (error) {
@@ -674,6 +750,11 @@ export async function importProduct(
 
   console.log(
     `📋 Params: ${rewritten.paramsUa.length}`
+  );
+
+
+  console.log(
+    `🖼️ Images saved: ${sortOrder - 1}`
   );
 
 

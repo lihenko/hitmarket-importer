@@ -3,24 +3,55 @@ import {
   writeFile,
 } from "node:fs/promises";
 
-import os from "node:os";
 import path from "node:path";
 
 import sharp from "sharp";
 
 
 /**
- * Коренева директорія проекту powerbank-landing.
+ * ============================================================
+ * POWERBANK PROJECT
+ * ============================================================
  *
- * Очікується структура:
+ * Структура:
  *
- * /home/vlad/
+ * 2026/
  * ├── hitmarket-importer/
  * └── powerbank-landing/
+ *
+ * Зображення:
+ *
+ * powerbank-landing/public/products
+ *
+ * Шлях визначаємо відносно importer.
+ */
+
+
+/**
+ * Поточний файл:
+ *
+ * hitmarket-importer/src/importer/save-product-image.ts
+ *
+ * Потрібно піднятися:
+ *
+ * save-product-image.ts
+ *        ↓
+ * importer
+ *        ↓
+ * src
+ *        ↓
+ * hitmarket-importer
+ *
+ * Потім:
+ *
+ * ../..
+ *
+ * і перейти в powerbank-landing.
  */
 const POWERBANK_PROJECT_DIR =
-  path.join(
-    os.homedir(),
+  path.resolve(
+    process.cwd(),
+    "..",
     "powerbank-landing"
   );
 
@@ -37,29 +68,51 @@ const PRODUCTS_DIR =
 
 
 /**
- * Завантажує та зберігає зображення товару.
+ * Мінімальний розмір зображення.
+ */
+const MIN_IMAGE_WIDTH = 400;
+const MIN_IMAGE_HEIGHT = 400;
+
+
+/**
+ * ============================================================
+ * SAVE PRODUCT IMAGE
+ * ============================================================
  *
- * Якщо зображення вже WebP:
- *   → просто зберігаємо оригінальний Buffer
+ * Завантажує зображення постачальника.
  *
- * Якщо інший формат:
- *   → конвертуємо в WebP
+ * Якщо зображення менше 400×400 —
+ * воно НЕ зберігається.
  *
- * @param imageUrl URL зображення постачальника
- * @param fileName Ім'я файлу без розширення
+ * Якщо зображення 400×400 або більше:
  *
- * @returns Публічний шлях:
- *          /products/example.webp
+ * WEBP:
+ *   → зберігаємо оригінальний buffer
+ *
+ * Інший формат:
+ *   → конвертуємо у WebP
+ *
+ * @returns
+ *
+ * /products/example.webp
+ *
+ * або
+ *
+ * null
+ *
+ * якщо зображення занадто маленьке.
  */
 export async function saveProductImage(
   imageUrl: string,
   fileName: string
-): Promise<string> {
+): Promise<string | null> {
 
   /**
-   * Створюємо директорію,
-   * якщо її ще немає.
+   * ----------------------------------------------------------
+   * Директорія
+   * ----------------------------------------------------------
    */
+
   await mkdir(
     PRODUCTS_DIR,
     {
@@ -69,8 +122,16 @@ export async function saveProductImage(
 
 
   /**
-   * Завантажуємо зображення.
+   * ----------------------------------------------------------
+   * DOWNLOAD
+   * ----------------------------------------------------------
    */
+
+  console.log(
+    `🖼️ Downloading image: ${imageUrl}`
+  );
+
+
   const response =
     await fetch(imageUrl);
 
@@ -86,8 +147,11 @@ export async function saveProductImage(
 
 
   /**
-   * Отримуємо binary data.
+   * ----------------------------------------------------------
+   * BUFFER
+   * ----------------------------------------------------------
    */
+
   const arrayBuffer =
     await response.arrayBuffer();
 
@@ -96,17 +160,75 @@ export async function saveProductImage(
 
 
   /**
-   * Визначаємо реальний формат
-   * зображення.
+   * ----------------------------------------------------------
+   * IMAGE METADATA
+   * ----------------------------------------------------------
+   *
+   * Визначаємо:
+   *
+   * - width
+   * - height
+   * - format
    */
+
   const metadata =
     await sharp(inputBuffer)
       .metadata();
 
 
+  const width =
+    metadata.width ?? 0;
+
+  const height =
+    metadata.height ?? 0;
+
+
+  console.log(
+    `📐 Image size: ${width}×${height}`
+  );
+
+
   /**
-   * Очищаємо ім'я файлу.
+   * ----------------------------------------------------------
+   * MINIMUM SIZE CHECK
+   * ----------------------------------------------------------
+   *
+   * Пропускаємо зображення,
+   * якщо хоча б одна сторона менша за 400.
+   *
+   * Наприклад:
+   *
+   * 399×500  → skip
+   * 500×399  → skip
+   * 300×300  → skip
+   *
+   * 400×400  → OK
+   * 1200×630 → OK
+   * 800×600  → OK
    */
+
+  if (
+    width < MIN_IMAGE_WIDTH ||
+    height < MIN_IMAGE_HEIGHT
+  ) {
+
+    console.log(
+      `⏭️ Skipping small image: ` +
+      `${width}×${height} ` +
+      `(minimum ${MIN_IMAGE_WIDTH}×${MIN_IMAGE_HEIGHT})`
+    );
+
+
+    return null;
+  }
+
+
+  /**
+   * ----------------------------------------------------------
+   * SAFE FILE NAME
+   * ----------------------------------------------------------
+   */
+
   const safeFileName =
     fileName
       .trim()
@@ -137,39 +259,49 @@ export async function saveProductImage(
 
 
   /**
+   * ----------------------------------------------------------
    * WEBP
+   * ----------------------------------------------------------
    *
-   * Нічого не перекодовуємо.
-   * Просто записуємо оригінальний файл.
+   * Якщо постачальник вже дає WebP —
+   * не перекодовуємо.
    */
-  if (metadata.format === "webp") {
+
+  if (
+    metadata.format === "webp"
+  ) {
 
     await writeFile(
       outputPath,
       inputBuffer
     );
 
+
+    console.log(
+      `✅ Saved WebP: ${outputPath}`
+    );
+
+
     return `/products/${finalFileName}`;
   }
 
 
   /**
-   * Інші формати:
-   *
-   * JPG
-   * PNG
-   * GIF
-   * AVIF
-   * TIFF
-   * тощо
-   *
-   * конвертуємо у WebP.
+   * ----------------------------------------------------------
+   * CONVERT TO WEBP
+   * ----------------------------------------------------------
    */
+
   await sharp(inputBuffer)
     .webp({
       quality: 85,
     })
     .toFile(outputPath);
+
+
+  console.log(
+    `✅ Converted to WebP: ${outputPath}`
+  );
 
 
   return `/products/${finalFileName}`;
