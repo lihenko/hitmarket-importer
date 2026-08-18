@@ -634,11 +634,106 @@ function validateParams(
      * ERROR
      */
 
+    function normalizeUnit(
+      unit: string | null
+    ): string | null {
+
+      if (!unit) {
+        return null;
+      }
+
+      const normalized =
+        unit
+          .trim()
+          .toLowerCase();
+
+      const aliases: Record<string, string> = {
+
+        // Об'єм пам'яті
+        "gb": "gb",
+        "гб": "gb",
+
+        "mb": "mb",
+        "мб": "mb",
+
+        "tb": "tb",
+        "тб": "tb",
+
+        "kb": "kb",
+        "кб": "kb",
+
+        // Напруга
+        "v": "v",
+        "в": "v",
+        "вольт": "v",
+
+        // Струм
+        "a": "a",
+        "а": "a",
+        "ампер": "a",
+
+        // Потужність
+        "w": "w",
+        "вт": "w",
+        "ват": "w",
+
+        "kw": "kw",
+        "квт": "kw",
+
+        // Частота
+        "hz": "hz",
+        "гц": "hz",
+
+        "khz": "khz",
+        "кгц": "khz",
+
+        "mhz": "mhz",
+        "мгц": "mhz",
+
+        "ghz": "ghz",
+        "ггц": "ghz",
+
+        // Довжина
+        "mm": "mm",
+        "мм": "mm",
+
+        "cm": "cm",
+        "см": "cm",
+
+        "m": "m",
+        "м": "m",
+
+        // Вага
+        "g": "g",
+        "г": "g",
+
+        "kg": "kg",
+        "кг": "kg",
+
+        // Об'єм
+        "ml": "ml",
+        "мл": "ml",
+
+        "l": "l",
+        "л": "l",
+      };
+
+      return (
+        aliases[normalized]
+        ?? normalized
+      );
+    }
+
+
     const sourceUnit =
-      source.unit?.trim() || null;
+      normalizeUnit(
+        source.unit
+      );
 
     const rewrittenUnit =
-      rewritten.unit?.trim() || null;
+      normalizeUnit(
+        rewritten.unit
+      );
 
 
     if (
@@ -649,6 +744,32 @@ function validateParams(
       return (
         `AI додав одиницю вимірювання ` +
         `для параметра "${source.name}".`
+      );
+    }
+
+
+    if (
+      sourceUnit !== null &&
+      rewrittenUnit === null
+    ) {
+
+      return (
+        `AI видалив одиницю вимірювання ` +
+        `для параметра "${source.name}". ` +
+        `Було: "${source.unit}".`
+      );
+    }
+
+
+    if (
+      sourceUnit !== rewrittenUnit
+    ) {
+
+      return (
+        `AI змінив одиницю вимірювання ` +
+        `параметра "${source.name}". ` +
+        `Було: "${source.unit}". ` +
+        `Отримано: "${rewritten.unit}".`
       );
     }
 
