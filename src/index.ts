@@ -31,6 +31,55 @@ async function main() {
 
     /**
      * --------------------------------------------------------
+     * ФІЛЬТР КАТЕГОРІЇ
+     * --------------------------------------------------------
+     *
+     * Запуск:
+     *
+     * npx tsx src/index.ts --category=70180949
+     *
+     * Якщо --category не переданий,
+     * імпортується весь фід.
+     */
+
+    const categoryArg =
+      process.argv.find(
+        (arg) =>
+          arg.startsWith("--category=")
+      );
+
+    const targetCategoryId =
+      categoryArg
+        ? categoryArg
+            .split("=")[1]
+        : null;
+
+
+    /**
+     * --------------------------------------------------------
+     * ІНФОРМАЦІЯ ПРО ФІЛЬТР
+     * --------------------------------------------------------
+     */
+
+    if (targetCategoryId) {
+
+      console.log(
+        `🎯 Category filter: ${targetCategoryId}`
+      );
+
+    } else {
+
+      console.log(
+        "🎯 Category filter: ALL"
+      );
+
+    }
+
+    console.log();
+
+
+    /**
+     * --------------------------------------------------------
      * ШЛЯХ ДО ФІДА
      * --------------------------------------------------------
      */
@@ -96,6 +145,95 @@ async function main() {
 
     /**
      * --------------------------------------------------------
+     * ФІЛЬТРУЄМО ТОВАРИ ПО КАТЕГОРІЇ
+     * --------------------------------------------------------
+     */
+
+    const productsToImport =
+      targetCategoryId
+        ? products.filter(
+            (product) =>
+              product.category?.id ===
+              targetCategoryId
+          )
+        : products;
+
+
+    /**
+     * --------------------------------------------------------
+     * ІНФОРМАЦІЯ ПРО ВІДІБРАНІ ТОВАРИ
+     * --------------------------------------------------------
+     */
+
+    console.log(
+      `🎯 Products selected for import: ${productsToImport.length}`
+    );
+
+    if (targetCategoryId) {
+
+      const categoryNames =
+        new Set(
+          productsToImport
+            .map(
+              product =>
+                product.category?.name
+            )
+            .filter(Boolean)
+        );
+
+
+      for (
+        const categoryName
+        of categoryNames
+      ) {
+
+        console.log(
+          `📂 Category: ${categoryName}`
+        );
+
+      }
+
+    }
+
+    console.log();
+
+
+    /**
+     * --------------------------------------------------------
+     * ЯКЩО ТОВАРІВ НЕМАЄ
+     * --------------------------------------------------------
+     */
+
+    if (
+      targetCategoryId &&
+      productsToImport.length === 0
+    ) {
+
+      console.log(
+        `⚠️ No products found for category ${targetCategoryId}`
+      );
+
+      console.log();
+
+      if (runId !== null) {
+
+        await finishImportRun(
+          runId,
+          {
+            totalOffers: 0,
+            status: "completed",
+          }
+        );
+
+      }
+
+      return;
+
+    }
+
+
+    /**
+     * --------------------------------------------------------
      * ЛІЧИЛЬНИКИ
      * --------------------------------------------------------
      */
@@ -113,14 +251,8 @@ async function main() {
 
     /**
      * --------------------------------------------------------
-     * ІМПОРТ ВСІХ ТОВАРІВ
+     * ІМПОРТ ТОВАРІВ
      * --------------------------------------------------------
-     *
-     * Тут більше НЕМАЄ:
-     *
-     * products.slice(...)
-     *
-     * Обробляємо весь фід.
      */
 
     for (
@@ -128,7 +260,7 @@ async function main() {
         index,
         product,
       ]
-      of products.entries()
+      of productsToImport.entries()
     ) {
 
       console.log(
@@ -136,7 +268,7 @@ async function main() {
       );
 
       console.log(
-        `📦 Product ${index + 1}/${products.length}`
+        `📦 Product ${index + 1}/${productsToImport.length}`
       );
 
       console.log(
@@ -149,6 +281,14 @@ async function main() {
 
       console.log(
         `Available: ${product.available}`
+      );
+
+      console.log(
+        `Category ID: ${product.category?.id ?? "none"}`
+      );
+
+      console.log(
+        `Category: ${product.category?.name ?? "none"}`
       );
 
       console.log(
@@ -236,8 +376,20 @@ async function main() {
     console.log("=================================");
 
     console.log(
-      `Total offers: ${products.length}`
+      `Total offers in feed: ${products.length}`
     );
+
+    console.log(
+      `Selected for import: ${productsToImport.length}`
+    );
+
+    if (targetCategoryId) {
+
+      console.log(
+        `Category ID: ${targetCategoryId}`
+      );
+
+    }
 
     console.log(
       `Created: ${created}`
@@ -260,7 +412,8 @@ async function main() {
     );
 
     console.log(
-      "=================================");
+      "================================="
+    );
 
 
     /**
@@ -275,12 +428,10 @@ async function main() {
         runId,
         {
           totalOffers:
-            products.length,
+            productsToImport.length,
 
           status:
-            failed > 0
-              ? "completed"
-              : "completed",
+            "completed",
         }
       );
 
@@ -310,9 +461,6 @@ async function main() {
      * Якщо import run вже створений,
      * позначаємо його завершеним.
      * --------------------------------------------------------
-     *
-     * Поки використовуємо тільки ті поля,
-     * які вже є у твоєму finishImportRun.
      */
 
     if (runId !== null) {
