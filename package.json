@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "admin": "tsx src/admin/server.ts",
+    "mangal": "tsx src/mangalzavod.ts"
   },
   "repository": {
     "type": "git",
@@ -21,13 +23,17 @@
   },
   "homepage": "https://github.com/lihenko/hitmarket-importer#readme",
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
     "@types/node": "^26.1.2",
     "tsx": "^4.23.11",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "fast-xml-parser": "^5.10.1",
+    "multer": "^2.3.0",
     "mysql2": "^3.23.2",
     "openai": "^7.4.0",
     "sharp": "^0.35.3"
