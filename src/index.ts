@@ -57,6 +57,38 @@ async function main() {
 
     /**
      * --------------------------------------------------------
+     * СТАРТОВА ПОЗИЦІЯ
+     * --------------------------------------------------------
+     *
+     * Запуск:
+     *
+     * npx tsx src/index.ts --start=5610
+     *
+     * Нумерація з 1, як у логах "Product N/Total".
+     * Рахується після фільтра по категорії.
+     * Якщо --start не переданий, імпорт іде з початку.
+     */
+
+    const startArg =
+      process.argv.find(
+        (arg) =>
+          arg.startsWith("--start=")
+      );
+
+    const startPosition =
+      startArg
+        ? Math.max(
+            1,
+            parseInt(
+              startArg.split("=")[1] ?? "",
+              10
+            ) || 1
+          )
+        : 1;
+
+
+    /**
+     * --------------------------------------------------------
      * ІНФОРМАЦІЯ ПРО ФІЛЬТР
      * --------------------------------------------------------
      */
@@ -149,7 +181,7 @@ async function main() {
      * --------------------------------------------------------
      */
 
-    const productsToImport =
+    const filteredProducts =
       targetCategoryId
         ? products.filter(
             (product) =>
@@ -161,9 +193,29 @@ async function main() {
 
     /**
      * --------------------------------------------------------
+     * ПРОПУСКАЄМО ТОВАРИ ДО СТАРТОВОЇ ПОЗИЦІЇ
+     * --------------------------------------------------------
+     */
+
+    const productsToImport =
+      filteredProducts.slice(
+        startPosition - 1
+      );
+
+
+    /**
+     * --------------------------------------------------------
      * ІНФОРМАЦІЯ ПРО ВІДІБРАНІ ТОВАРИ
      * --------------------------------------------------------
      */
+
+    if (startPosition > 1) {
+
+      console.log(
+        `⏩ Starting from position: ${startPosition}`
+      );
+
+    }
 
     console.log(
       `🎯 Products selected for import: ${productsToImport.length}`
@@ -268,7 +320,7 @@ async function main() {
       );
 
       console.log(
-        `📦 Product ${index + 1}/${productsToImport.length}`
+        `📦 Product ${startPosition + index}/${filteredProducts.length}`
       );
 
       console.log(
